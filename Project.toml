@@ -1,3 +1,6 @@
 [deps]
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MRIReco = "bdf86e05-2d2b-5731-a332-f3fe1f9e047f"
 NIfTI = "a3a9e032-41b5-5fc4-967a-a6b7a19844d3"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"

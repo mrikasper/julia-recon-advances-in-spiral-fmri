@@ -12,11 +12,12 @@ do_b0_correction = true
 
 # from previous Matlab calculation
 # rad/s, manually determined from conversion of b0 map
-wo_offset = -76.4903
+w_offset = 0
+#w_offset = -76.4903
 dt = 1.8e-6 # acquisition dwell time [s]
 Nx = 240
 Ny = 292
-fov = [190, 230, 0.9]/1000 # [m]
+fov = [190, 230, 0.9+0.1]/1000 # [m]
 
 idx_slice = 18; # slice(s) to reconstruct
 do_select_slice =  !isempty(idx_slice)
@@ -54,16 +55,19 @@ if do_select_slice
 
 	n_slices =  size(idx_slice,1);
 	# make sinlge slice parameter set
+	rawData.profiles[1].head.idx.slice = 0;
 	rawData.params["enc_lim_slice"] = Limit(0, 0, 0)
 	rawData.params["reconSize"][3] = n_slices
 	rawData.params["encodedSize"][3] = n_slices
-	rawData.params["encodedFOV"][3] = rawData.params["encodedFOV"][3]/size(indices,1)*size(idx_slice,1)
+	rawData.params["reconFOV"][3] = rawData.params["reconFOV"][3]/size(indices,1)*n_slices
+	rawData.params["encodedFOV"][3] = rawData.params["encodedFOV"][3]/size(indices,1)*n_slices
 	# print function for all parameters
 	 for (key, value) in rawData.params; print(key); print(": ");print(value);print("\n"); end
 end
 
 @info "Converting rawAcquisitionData to AcquisitionData"
-acqData = AcquisitionData(rawData,estimateProfileCenter=false)
+# acqData = AcquisitionData(rawData,estimateProfileCenter=false)
+acqData = AcquisitionData(rawData)
 
 
 #############################################
@@ -76,6 +80,9 @@ traj_node_normalized /= (2*π)
 traj_node_normalized[2,:,:] /= Nx/fov[1]
 traj_node_normalized[1,:,:] /= Ny/fov[2]
 
+# TODO: remove 3rd dimension for recon, otherwise MRIReco.jl has 3D assumption
+traj_node_normalized = traj_node_normalized[1:2,:]
+
 acqData.traj[1].nodes = traj_node_normalized
 
 
@@ -86,7 +93,7 @@ acqData.traj[1].nodes = traj_node_normalized
 @info "Plot Normalized Trajectory"
 
 mytr = acqData.traj[1]
-figure(3);
+figure(1);
 subplot(1,2,2)
 plot(mytr.nodes[1,:], mytr.nodes[2,:]);
 #plot(traj[1,:], traj[2,:]);
@@ -122,11 +129,11 @@ else
 	n_slices = size(sense,3);
 
     # Rotate sensitivity maps to match geometry of MRIReco
-    for ch = 1:n_channels
-		for sli = 1:n_slices
-	    	sense[:,:,sli,ch] = rot180(sense[:,:,sli,ch]);
-		end
-    end
+    # for ch = 1:n_channels
+	# 	for sli = 1:n_slices
+	#     	sense[:,:,sli,ch] = rot180(sense[:,:,sli,ch]);
+	# 	end
+    # end
 
     sensitivity = Array{Array{Complex{Float64},2},4}(undef,1,1,1,1)
     sensitivity = sense;
@@ -149,9 +156,9 @@ b0 = niread(filename_b0)./2π .- wo_offset
 #select recon slice
 b0 = b0[:,:,idx_slice]
 
-for sli = 1:n_slices
-	b0[:,:,sli] = rot180(b0[:,:,sli]);
-end
+# for sli = 1:n_slices
+# 	b0[:,:,sli] = rot180(b0[:,:,sli]);
+# end
 
 cmap = 1im.*b0;
 
@@ -162,7 +169,7 @@ gcf()
 ##########################
 ## Perform reference reconstruction
 ##########################
-@info "reference reco"
+@info "Reference  cg-SENSE recon"
 params = Dict{Symbol, Any}()
 params[:reco] = "multiCoil"
 params[:reconSize] = (Nx,Ny)
@@ -171,7 +178,8 @@ params[:λ] = 1.e-2
 params[:iterations] = 10
 params[:solver] = "cgnr"
 params[:solverInfo] = SolverInfo(ComplexF64,store_solutions=true)
-params[:senseMaps] = reshape(sensitivity, Nx, Ny, 1, n_channels)
+# conversion to ComplexF64 needed for reconstruction_2d solver
+params[:senseMaps] = convert(Array{ComplexF64, 4}, reshape(sensitivity, Nx, Ny, 1, n_channels))
 
 # params[:reco] = "direct"
 @time begin
@@ -185,7 +193,7 @@ params[:senseMaps] = reshape(sensitivity, Nx, Ny, 1, n_channels)
     img_ref = reconstruction(acqData, params).data
 end
 
-h5write(filename_recon, "/img_ref", img_ref)
+# h5write(filename_recon, "/img_ref", img_ref)
 
 
 ##########################
