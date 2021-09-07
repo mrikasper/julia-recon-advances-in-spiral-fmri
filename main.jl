@@ -13,7 +13,7 @@ do_b0_correction = true
 # from previous Matlab calculation
 # rad/s, manually determined from conversion of b0 map
 w_offset = 0
-#w_offset = -76.4903
+w0_offset = 0#-76.4903
 dt = 1.8e-6 # acquisition dwell time [s]
 Nx = 240
 Ny = 292
@@ -65,10 +65,16 @@ if do_select_slice
 	 for (key, value) in rawData.params; print(key); print(": ");print(value);print("\n"); end
 end
 
-@info "Converting rawAcquisitionData to AcquisitionData"
+@info "Converting RawAcquisitionData to AcquisitionData"
 # acqData = AcquisitionData(rawData,estimateProfileCenter=false)
+
 acqData = AcquisitionData(rawData)
 
+# adjust TE and TAQ after read-in, is not taken from file
+n_samples = rawData.params["encodedSize"][1]
+tAQ = n_samples * dt
+acqData.traj[1].AQ=tAQ # important for B0 correction
+acqData.traj[1].TE=0.02
 
 #############################################
 ## Load and convert traj from rad/m to -0.5 -> 0.5
@@ -151,7 +157,7 @@ gcf()
 ##########################
 
 @info "Load B0 map"
-b0 = niread(filename_b0)./2π .- wo_offset
+b0 = niread(filename_b0).*2π .- w0_offset
 
 #select recon slice
 b0 = b0[:,:,idx_slice]
@@ -169,7 +175,7 @@ gcf()
 ##########################
 ## Perform reference reconstruction
 ##########################
-@info "Reference  cg-SENSE recon"
+@info "Reference cg-SENSE recon"
 params = Dict{Symbol, Any}()
 params[:reco] = "multiCoil"
 params[:reconSize] = (Nx,Ny)
@@ -177,7 +183,8 @@ params[:regularization] = "L2"
 params[:λ] = 1.e-2
 params[:iterations] = 10
 params[:solver] = "cgnr"
-params[:solverInfo] = SolverInfo(ComplexF64,store_solutions=true)
+params[:solverInfo] = SolverInfo(ComplexF64,store_solutions=do_inspect_iterations)
+
 # conversion to ComplexF64 needed for reconstruction_2d solver
 params[:senseMaps] = convert(Array{ComplexF64, 4}, reshape(sensitivity, Nx, Ny, 1, n_channels))
 
