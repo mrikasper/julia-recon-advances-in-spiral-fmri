@@ -213,6 +213,14 @@ subplot(1,2,2); imshow(rotl90(angle.(img_ref[:,:,1,1,1])), cmap="gray");
 subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
 gcf()
 
+figure(6); cla();
+subplot(1,2,1); plot(params[:solverInfo].convMeas); title("Linear")
+subplot(1,2,2); semilogy(params[:solverInfo].convMeas);  title("Log")
+gcf().suptitle("Convergence over Iterations")
+xlabel("Iterations")
+gcf()
+
+
 # plot with colorbar
 # begin
 # 	fig, (ax1, ax2) = subplots(figsize=(9, 3), ncols=2)
