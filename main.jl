@@ -9,10 +9,10 @@ using NIfTI, PyPlot, HDF5, MRIReco, LinearAlgebra
 
 do_recalc_sensitivity = false
 do_b0_correction = true
+do_inspect_iterations = false
 
 # from previous Matlab calculation
 # rad/s, manually determined from conversion of b0 map
-w_offset = 0
 w0_offset = 0#-76.4903
 dt = 1.8e-6 # acquisition dwell time [s]
 Nx = 240
@@ -214,20 +214,22 @@ subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
 gcf()
 
 # plot with colorbar
-begin
-	fig, (ax1, ax2) = subplots(figsize=(9, 3), ncols=2)
-	hp1 = ax1.imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.8, aspect="equal")
-	hp2 = ax2.imshow(rotl90(angle.(img_ref[:,:,1,1,1].-π/10.0)), cmap="gray")
-	fig.colorbar(hp1, ax=ax1)
-	fig.colorbar(hp2, ax=ax2)
-	fig
-end
+# begin
+# 	fig, (ax1, ax2) = subplots(figsize=(9, 3), ncols=2)
+# 	hp1 = ax1.imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.8, aspect="equal")
+# 	hp2 = ax2.imshow(rotl90(angle.(img_ref[:,:,1,1,1].-π/10.0)), cmap="gray")
+# 	fig.colorbar(hp1, ax=ax1)
+# 	fig.colorbar(hp2, ax=ax2)
+# 	fig
+# end
 
-img_iter = Vector{Array{ComplexF64,5}}(undef,11)
-for iter = 1:11
-    img_iter[iter] = reshape(params[:solverInfo].x_iter[iter],Nx,Ny,1,1,1)
-    figure(1000+iter);cla;imshow(abs.(img_ref[:,:,1,1,1])); gcf()
+# Plot Iterations
+if do_inspect_iterations
+ 	img_iter = Vector{Array{ComplexF64,5}}(undef,11)
+ 	for iter = 1:11
+     	img_iter[iter] = reshape(params[:solverInfo].x_iter[iter],Nx,Ny,1,1,1)
+     	figure(1000+iter);cla;imshow(abs.(img_ref[:,:,1,1,1])); gcf()
+	end
 end
-
 
 # savefig("Fig5.png",dpi=300)
