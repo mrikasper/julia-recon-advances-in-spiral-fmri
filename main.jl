@@ -2,7 +2,7 @@
 ## Set parameters
 #############################################
 
-using NIfTI, PyPlot, HDF5, MRIReco, LinearAlgebra
+using NIfTI, PyPlot, HDF5, MRIReco, LinearAlgebra, Dates
 
 # parameters
 @info "Setting Parameters"
@@ -232,4 +232,9 @@ if do_inspect_iterations
 	end
 end
 
-# savefig("Fig5.png",dpi=300)
+##########################
+## Save final recon result with a time stamp
+##########################
+figure(5);gcf()
+figSaveName = string("FinalRecon_", Dates.format(Dates.now(), "yyyy-mm-dd_HH_MM_SS"), ".png")
+savefig(figSaveName,dpi=300)
