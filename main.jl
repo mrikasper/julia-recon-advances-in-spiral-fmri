@@ -10,14 +10,15 @@ using NIfTI, PyPlot, HDF5, MRIReco, LinearAlgebra, Dates
 do_recalc_sensitivity = false
 do_b0_correction = true
 do_inspect_iterations = false
+b0_map_type = "smoothed" # "raw" or "smoothed" or "smoothed_resized"
 
 # from previous Matlab calculation
 # rad/s, manually determined from conversion of b0 map
 w0_offset = + 76.4903
 dt = 1.8e-6 # acquisition dwell time [s]
 TE = 0.02 # s
-Nx = 300 # 240
-Ny = 365 # 292
+Nx = 240 # 300 # 240
+Ny = 292 # 365 # 292
 fov = [190, 230, 0.9+0.1]/1000 # [m]
 
 idx_slice = 18; # slice(s) to reconstruct
@@ -31,7 +32,18 @@ filename_data = joinpath(path_data,"SPIFI_0007_RawData_RotatedToSliceGeometry3D_
 # Maps are NIFTI files (.nii); units: Hz
 filename_sense_magnitude = joinpath(path_data, "SPIFI_0007_MapsForReconstruction", "coilSensitivityMaps_magnitude.nii")
 filename_sense_phase = joinpath(path_data, "SPIFI_0007_MapsForReconstruction", "coilSensitivityMaps_phase.nii")
-filename_b0 = joinpath(path_data, "SPIFI_0007_MapsForReconstruction", "b0MapSmoothedResizedSpiralGeometry1_Hz.nii")
+
+if b0_map_type == "smoothed_resized"
+	# should give proper results
+	filename_b0 = joinpath(path_data, "SPIFI_0007_MapsForReconstruction", "b0MapSmoothedResizedSpiralGeometry1_Hz.nii")
+elseif b0_map_type == "smoothed"
+	filename_b0 = joinpath(path_data, "SPIFI_0007_MapsForReconstruction", "b0MapSmoothed1_Hz.nii")
+elseif b0_map_type == "raw"
+	# use raw map instead:
+	filename_b0 = joinpath(path_data, "SPIFI_0007_MapsForReconstruction", "b0MapRaw1_Hz.nii")
+else
+	error("Requested B0 map type not implemented or saved")
+end
 
 # rawdata: ch, il, read was order
 # traj: il, read, kdim(x,y,z)
@@ -66,6 +78,13 @@ if do_select_slice
 	 for (key, value) in rawData.params; print(key); print(": ");print(value);print("\n"); end
 end
 
+# alternative read-in of data, not relying on mutable struct AcquisitionHeader in MRIReco.jl
+# mytr = Trajectory(reshape(traj[1:2,:,:],2,:), n_interleaves, n_samples,
+# TE=0.02, AQ=tAQ, circular=true)
+# dat = Array{Array{Complex{Float64},2},3}(undef,1,1,1)
+# dat[1,1,1] = reshape(rawdata,:,n_channels)
+# acqData = AcquisitionData(mytr, dat, encodingSize=[Nx,Ny,1], fov=fov)
+
 @info "Converting RawAcquisitionData to AcquisitionData"
 # acqData = AcquisitionData(rawData,estimateProfileCenter=false)
 acqData = AcquisitionData(rawData)
@@ -76,9 +95,19 @@ tAQ = (n_samples-1) * dt
 acqData.traj[1].AQ=tAQ # important for B0 correction
 acqData.traj[1].TE= TE
 acqData.traj[1].times = TE .+ collect(0:dt:tAQ)
+
 #############################################
 ## Load and convert traj from rad/m to -0.5 -> 0.5
 #############################################
+
+# Plot Raw Trajectory
+mytr = acqData.traj[1]
+figure(1);
+subplot(1,2,1)
+plot(mytr.nodes[1,:], mytr.nodes[2,:]);
+title("Raw Trajectory")
+axis(:square)
+gcf()
 
 @info "Normalize trajectory rad/m -> [-1/2 1/2] FOV"
 traj_node_normalized = acqData.traj[1].nodes
@@ -93,7 +122,7 @@ acqData.traj[1].nodes = traj_node_normalized
 
 
 #############################################
-## Plot Trajectory
+## Plot Normalized Trajectory
 ##############################################
 
 @info "Plot Normalized Trajectory"
@@ -102,7 +131,7 @@ mytr = acqData.traj[1]
 figure(1);
 subplot(1,2,2)
 plot(mytr.nodes[1,:], mytr.nodes[2,:]);
-#plot(traj[1,:], traj[2,:]);
+title("Normalized Trajectory")
 axis(:square)
 gcf()
 
@@ -164,7 +193,14 @@ resizedB0 = mapslices(x->imresize(x,(Nx, Ny)), b0, dims=[1,2])
 
 cmap = 1im.*resizedB0;
 
-figure(4); cla(); imshow(rotl90(resizedB0), cmap="gray");
+figure(4); cla();
+subplot(1,2,1)
+imshow(rotl90(b0), cmap="gray");
+colorbar()
+title("Loaded B0 map")
+subplot(1,2,2)
+imshow(rotl90(resizedB0), cmap="gray");
+title("B0 map, resized to Recon Geometry")
 subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
 colorbar()
 gcf()
@@ -205,6 +241,7 @@ end
 
 figure(5); cla();
 subplot(1,2,1); imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.8, aspect="equal");
+subplot(1,2,1); imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.6, aspect="equal");
 subplot(1,2,2); imshow(rotl90(angle.(img_ref[:,:,1,1,1])), cmap="gray");
 subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
 gcf()
