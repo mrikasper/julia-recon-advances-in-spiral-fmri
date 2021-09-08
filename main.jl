@@ -8,7 +8,7 @@ using NIfTI, PyPlot, HDF5, MRIReco, LinearAlgebra, Dates
 @info "Setting Parameters"
 
 do_recalc_sensitivity = false
-do_b0_correction = false
+do_b0_correction = true
 do_inspect_iterations = false
 
 # from previous Matlab calculation
@@ -16,8 +16,8 @@ do_inspect_iterations = false
 w0_offset = + 76.4903
 dt = 1.8e-6 # acquisition dwell time [s]
 TE = 0.02 # s
-Nx = 240
-Ny = 292
+Nx = 300 # 240
+Ny = 365 # 292
 fov = [190, 230, 0.9+0.1]/1000 # [m]
 
 idx_slice = 18; # slice(s) to reconstruct
@@ -134,16 +134,14 @@ else
 
 	n_slices = size(sense,3);
 
-    # Rotate sensitivity maps to match geometry of MRIReco
-    # for ch = 1:n_channels
-	# 	for sli = 1:n_slices
-	#     	sense[:,:,sli,ch] = rot180(sense[:,:,sli,ch]);
-	# 	end
-    # end
-
     sensitivity = Array{Array{Complex{Float64},2},4}(undef,1,1,1,1)
     sensitivity = sense;
 end
+
+sensitivity = mapslices(x ->imresize(x, (Nx, Ny)), sensitivity, dims=[1,2])
+# conversion to ComplexF64 needed for reconstruction_2d solver
+sensitivity = convert(Array{ComplexF64, 4}, reshape(sensitivity, Nx, Ny, 1, n_channels))
+
 
 figure(2); clf(); for ch in 1:n_channels; subplot(8,4,ch); imshow(rotl90(abs.(sense[:,:,1,ch]))); end;
 subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
@@ -162,16 +160,15 @@ b0 = niread(filename_b0).*2π .- w0_offset
 #select recon slice
 b0 = b0[:,:,idx_slice]
 
-# for sli = 1:n_slices
-# 	b0[:,:,sli] = rot180(b0[:,:,sli]);
-# end
+resizedB0 = mapslices(x->imresize(x,(Nx, Ny)), b0, dims=[1,2])
 
-cmap = 1im.*b0;
+cmap = 1im.*resizedB0;
 
-figure(4); cla(); imshow(rotl90(b0), cmap="gray");
+figure(4); cla(); imshow(rotl90(resizedB0), cmap="gray");
 subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
 colorbar()
 gcf()
+
 
 ##########################
 ## Perform reference reconstruction
@@ -185,9 +182,7 @@ params[:λ] = 1.e-2
 params[:iterations] = 10
 params[:solver] = "cgnr"
 params[:solverInfo] = SolverInfo(ComplexF64,store_solutions=do_inspect_iterations)
-
-# conversion to ComplexF64 needed for reconstruction_2d solver
-params[:senseMaps] = convert(Array{ComplexF64, 4}, reshape(sensitivity, Nx, Ny, 1, n_channels))
+params[:senseMaps] = sensitivity
 
 # params[:reco] = "direct"
 @time begin
