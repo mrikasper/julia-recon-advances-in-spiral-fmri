@@ -8,13 +8,14 @@ using NIfTI, PyPlot, HDF5, MRIReco, LinearAlgebra, Dates
 @info "Setting Parameters"
 
 do_recalc_sensitivity = false
-do_b0_correction = true
+do_b0_correction = false
 do_inspect_iterations = false
 
 # from previous Matlab calculation
 # rad/s, manually determined from conversion of b0 map
-w0_offset = 0#-76.4903
+w0_offset = + 76.4903
 dt = 1.8e-6 # acquisition dwell time [s]
+TE = 0.02 # s
 Nx = 240
 Ny = 292
 fov = [190, 230, 0.9+0.1]/1000 # [m]
@@ -67,15 +68,14 @@ end
 
 @info "Converting RawAcquisitionData to AcquisitionData"
 # acqData = AcquisitionData(rawData,estimateProfileCenter=false)
-
 acqData = AcquisitionData(rawData)
 
 # adjust TE and TAQ after read-in, is not taken from file
 n_samples = rawData.params["encodedSize"][1]
-tAQ = n_samples * dt
+tAQ = (n_samples-1) * dt
 acqData.traj[1].AQ=tAQ # important for B0 correction
-acqData.traj[1].TE=0.02
-
+acqData.traj[1].TE= TE
+acqData.traj[1].times = TE .+ collect(0:dt:tAQ)
 #############################################
 ## Load and convert traj from rad/m to -0.5 -> 0.5
 #############################################
@@ -170,6 +170,7 @@ cmap = 1im.*b0;
 
 figure(4); cla(); imshow(rotl90(b0), cmap="gray");
 subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
+colorbar()
 gcf()
 
 ##########################
