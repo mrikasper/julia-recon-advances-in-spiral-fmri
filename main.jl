@@ -7,14 +7,17 @@ using NIfTI, PyPlot, HDF5, MRIReco, LinearAlgebra, Dates
 # parameters
 @info "Setting Parameters"
 
+verbosity_level = 1 # 0 = no Visualization, 1 = recon only, 2 = maps, 3 = iterations
 do_recalc_sensitivity = false
 do_b0_correction = true
-do_inspect_iterations = false
 b0_map_type = "smoothed" # "raw" or "smoothed" or "smoothed_resized"
 
-# from previous Matlab calculation
-# rad/s, manually determined from conversion of b0 map
-w0_offset = + 76.4903
+do_plot_recon 		= verbosity_level >= 1
+do_plot_maps 		= verbosity_level >= 2
+do_plot_traj 		= do_plot_maps
+do_plot_iterations 	= verbosity_level >= 3
+
+w0_offset = 0 # rad/s, only needed for simulating f0 effects
 dt = 1.8e-6 # acquisition dwell time [s]
 TE = 0.02 # s
 Nx = 240 # 300 # 240
@@ -27,7 +30,7 @@ do_select_slice =  !isempty(idx_slice)
 path_data = "D:\\SPIFI\\ExportETHResearchCollection"
 
 # Raw Coil/Trajectory data: ISMRMRD file (.nii); units: rad/m
-filename_data = joinpath(path_data,"SPIFI_0007_RawData_RotatedToSliceGeometry3D_spiralOut_singleVolume.h5")
+filename_data = joinpath(path_data,"SPIFI_0007_RawData_RotatedToSliceGeometry3D_spiralOut_singleVolume100.h5")
 
 # Maps are NIFTI files (.nii); units: Hz
 filename_sense_magnitude = joinpath(path_data, "SPIFI_0007_MapsForReconstruction", "coilSensitivityMaps_magnitude.nii")
@@ -69,7 +72,9 @@ if do_select_slice
 	n_slices =  size(idx_slice,1);
 	# make sinlge slice parameter set
 	rawData.profiles[1].head.idx.slice = 0;
+	rawData.profiles[1].head.idx.repetition=0;
 	rawData.params["enc_lim_slice"] = Limit(0, 0, 0)
+	rawData.params["enc_lim_repetition"] = Limit(0, 0 ,0)
 	rawData.params["reconSize"][3] = n_slices
 	rawData.params["encodedSize"][3] = n_slices
 	rawData.params["reconFOV"][3] = rawData.params["reconFOV"][3]/size(indices,1)*n_slices
@@ -100,14 +105,16 @@ acqData.traj[1].times = TE .+ collect(0:dt:tAQ)
 ## Load and convert traj from rad/m to -0.5 -> 0.5
 #############################################
 
-# Plot Raw Trajectory
-mytr = acqData.traj[1]
-figure(1);
-subplot(1,2,1)
-plot(mytr.nodes[1,:], mytr.nodes[2,:]);
-title("Raw Trajectory")
-axis(:square)
-gcf()
+if do_plot_traj
+	# Plot Raw Trajectory
+	mytr = acqData.traj[1]
+	figure(1);
+	subplot(1,2,1)
+	plot(mytr.nodes[1,:], mytr.nodes[2,:]);
+	title("Raw Trajectory")
+	axis(:square)
+	gcf()
+end
 
 @info "Normalize trajectory rad/m -> [-1/2 1/2] FOV"
 traj_node_normalized = acqData.traj[1].nodes
@@ -115,7 +122,7 @@ traj_node_normalized /= (2*π)
 traj_node_normalized[2,:,:] /= Nx/fov[1]
 traj_node_normalized[1,:,:] /= Ny/fov[2]
 
-# TODO: remove 3rd dimension for recon, otherwise MRIReco.jl has 3D assumption
+# Remove 3rd dimension for recon, otherwise MRIReco.jl has 3D assumption
 traj_node_normalized = traj_node_normalized[1:2,:]
 
 acqData.traj[1].nodes = traj_node_normalized
@@ -125,15 +132,17 @@ acqData.traj[1].nodes = traj_node_normalized
 ## Plot Normalized Trajectory
 ##############################################
 
-@info "Plot Normalized Trajectory"
+if do_plot_traj
+	@info "Plot Normalized Trajectory"
 
-mytr = acqData.traj[1]
-figure(1);
-subplot(1,2,2)
-plot(mytr.nodes[1,:], mytr.nodes[2,:]);
-title("Normalized Trajectory")
-axis(:square)
-gcf()
+	mytr = acqData.traj[1]
+	figure(1);
+	subplot(1,2,2)
+	plot(mytr.nodes[1,:], mytr.nodes[2,:]);
+	title("Normalized Trajectory")
+	axis(:square)
+	gcf()
+end
 
 ################################
 ## Generate coil sensitivity maps
@@ -171,13 +180,14 @@ sensitivity = mapslices(x ->imresize(x, (Nx, Ny)), sensitivity, dims=[1,2])
 # conversion to ComplexF64 needed for reconstruction_2d solver
 sensitivity = convert(Array{ComplexF64, 4}, reshape(sensitivity, Nx, Ny, 1, n_channels))
 
-
-figure(2); clf(); for ch in 1:n_channels; subplot(8,4,ch); imshow(rotl90(abs.(sense[:,:,1,ch]))); end;
-subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
-gcf()
-figure(3); clf(); for ch in 1:n_channels; subplot(8,4,ch); imshow(rotl90(angle.(sense[:,:,1,ch]))); end;
-subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
-gcf()
+if do_plot_maps
+	figure(2); clf(); for ch in 1:n_channels; subplot(8,4,ch); imshow(rotl90(abs.(sense[:,:,1,ch]))); end;
+	subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
+	gcf()
+	figure(3); clf(); for ch in 1:n_channels; subplot(8,4,ch); imshow(rotl90(angle.(sense[:,:,1,ch]))); end;
+	subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
+	gcf()
+end
 
 ##########################
 ## Load B0 map, adapt geometry
@@ -193,18 +203,20 @@ resizedB0 = mapslices(x->imresize(x,(Nx, Ny)), b0, dims=[1,2])
 
 cmap = 1im.*resizedB0;
 
-figure(4); cla();
-subplot(1,2,1)
-imshow(rotl90(b0), cmap="gray");
-colorbar()
-title("Loaded B0 map")
-subplot(1,2,2)
-imshow(rotl90(resizedB0), cmap="gray");
-title("B0 map, resized to Recon Geometry")
-subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
-colorbar()
-gcf()
-
+if do_plot_maps
+	# Plot B0 map before and after resizing
+	figure(4); cla();
+	subplot(1,2,1)
+	imshow(rotl90(b0), cmap="gray");
+	colorbar()
+	title("Loaded B0 map")
+	subplot(1,2,2)
+	imshow(rotl90(resizedB0), cmap="gray");
+	title("B0 map, resized to Recon Geometry")
+	subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
+	colorbar()
+	gcf()
+end
 
 ##########################
 ## Perform reference reconstruction
@@ -217,11 +229,12 @@ params[:regularization] = "L2"
 params[:λ] = 1.e-2
 params[:iterations] = 10
 params[:solver] = "cgnr"
-params[:solverInfo] = SolverInfo(ComplexF64,store_solutions=do_inspect_iterations)
+params[:solverInfo] = SolverInfo(ComplexF64,store_solutions=do_plot_iterations)
 params[:senseMaps] = sensitivity
 
 # params[:reco] = "direct"
-@time begin
+#@time
+begin
     if do_b0_correction
         params[:correctionMap] = cmap
         #params[:alpha] = 1.75 # oversampling factor for interpolation
@@ -238,34 +251,35 @@ end
 ##########################
 ## Plot resulting recon and iterations
 ##########################
+if do_plot_recon
+	figure(5); cla();
+	subplot(1,2,1); imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.8, aspect="equal");
+	subplot(1,2,1); imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.6, aspect="equal");
+	subplot(1,2,2); imshow(rotl90(angle.(img_ref[:,:,1,1,1])), cmap="gray");
+	subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
+	gcf()
 
-figure(5); cla();
-subplot(1,2,1); imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.8, aspect="equal");
-subplot(1,2,1); imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.6, aspect="equal");
-subplot(1,2,2); imshow(rotl90(angle.(img_ref[:,:,1,1,1])), cmap="gray");
-subplots_adjust(wspace=0.05,hspace=0.05,left=0.05,bottom=0.0,right=1.0,top=0.95)
-gcf()
-
-figure(6); cla();
-subplot(1,2,1); plot(params[:solverInfo].convMeas); title("Linear")
-subplot(1,2,2); semilogy(params[:solverInfo].convMeas);  title("Log")
-gcf().suptitle("Convergence over Iterations")
-xlabel("Iterations")
-gcf()
+	figure(6); cla();
+	subplot(1,2,1); plot(params[:solverInfo].convMeas); title("Linear")
+	subplot(1,2,2); semilogy(params[:solverInfo].convMeas);  title("Log")
+	gcf().suptitle("Convergence over Iterations")
+	xlabel("Iterations")
+	gcf()
 
 
-# plot with colorbar
-# begin
-# 	fig, (ax1, ax2) = subplots(figsize=(9, 3), ncols=2)
-# 	hp1 = ax1.imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.8, aspect="equal")
-# 	hp2 = ax2.imshow(rotl90(angle.(img_ref[:,:,1,1,1].-π/10.0)), cmap="gray")
-# 	fig.colorbar(hp1, ax=ax1)
-# 	fig.colorbar(hp2, ax=ax2)
-# 	fig
-# end
+	# plot with colorbar
+	# begin
+	# 	fig, (ax1, ax2) = subplots(figsize=(9, 3), ncols=2)
+	# 	hp1 = ax1.imshow(rotl90(abs.(img_ref[:,:,1,1,1])), cmap="gray", vmax=0.8, aspect="equal")
+	# 	hp2 = ax2.imshow(rotl90(angle.(img_ref[:,:,1,1,1].-π/10.0)), cmap="gray")
+	# 	fig.colorbar(hp1, ax=ax1)
+	# 	fig.colorbar(hp2, ax=ax2)
+	# 	fig
+	# end
+end
 
 # Plot Iterations
-if do_inspect_iterations
+if do_plot_iterations
  	img_iter = Vector{Array{ComplexF64,5}}(undef,11)
  	for iter = 1:11
      	img_iter[iter] = reshape(params[:solverInfo].x_iter[iter],Nx,Ny,1,1,1)
@@ -276,6 +290,8 @@ end
 ##########################
 ## Save final recon result with a time stamp
 ##########################
-figure(5);gcf()
-figSaveName = string("FinalRecon_", Dates.format(Dates.now(), "yyyy-mm-dd_HH_MM_SS"), ".png")
-savefig(figSaveName,dpi=300)
+if do_plot_recon
+	figure(5);gcf()
+	figSaveName = string("FinalRecon_", Dates.format(Dates.now(), "yyyy-mm-dd_HH_MM_SS"), ".png")
+	savefig(figSaveName,dpi=300)
+end

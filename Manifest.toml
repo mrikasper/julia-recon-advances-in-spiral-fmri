@@ -571,7 +571,7 @@ uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
 version = "2021.1.1+1"
 
 [[MRIReco]]
-deps = ["Distributed", "Distributions", "FFTW", "FileIO", "Graphics", "HDF5", "ImageUtils", "LightXML", "LinearAlgebra", "LinearOperators", "LowRankApprox", "NFFT", "NIfTI", "ProgressMeter", "Random", "Reexport", "RegularizedLeastSquares", "SparsityOperators", "StatsBase", "ThreadPools", "Unitful", "Wavelets"]
+deps = ["Distributed", "Distributions", "FFTW", "FileIO", "Graphics", "HDF5", "ImageUtils", "LightXML", "LinearAlgebra", "LinearOperators", "LowRankApprox", "NFFT", "NIfTI", "ProgressMeter", "PyPlot", "Random", "Reexport", "RegularizedLeastSquares", "SparsityOperators", "StatsBase", "ThreadPools", "Unitful", "Wavelets"]
 path = "C:\\Users\\kasperla\\.julia\\dev\\MRIReco"
 uuid = "bdf86e05-2d2b-5731-a332-f3fe1f9e047f"
 version = "0.3.5"
