@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6308926.svg)](https://doi.org/10.5281/zenodo.6308926)
+
 # julia-recon-advances-in-spiral-fmri
 Example pipeline for undersampled (R=4) spiral image reconstruction with static B0 correction 
 - using [MRIReco.jl](https://magneticresonanceimaging.github.io/MRIReco.jl/latest/), an MRI reconstruction framework written in Julia ([Knopp and Grosser, MRM, 2021](https://doi.org/10.1002/mrm.28792))
